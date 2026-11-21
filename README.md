@@ -113,7 +113,7 @@ Missiles track. Overcharge packages make the guns go feral.
 
 - **Vite + TypeScript**
 - Single high-performance **Canvas 2D** loop
-- Procedural audio (no asset pack required)
+- **Full procedural audio** — dusk music bed, engine roar, guns, missiles, mega-booms (press **M** to mute)
 - Local high-score persistence
 
 Built to feel handmade, not scaffolded.

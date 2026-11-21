@@ -88,6 +88,7 @@ export class Game {
     btnMissile: document.getElementById('btn-missile') as HTMLButtonElement,
     btnWeapon: document.getElementById('btn-weapon') as HTMLButtonElement,
     btnBoost: document.getElementById('btn-boost') as HTMLButtonElement,
+    muteBtn: document.getElementById('mute-btn') as HTMLButtonElement,
   }
 
   constructor(canvas: HTMLCanvasElement) {
@@ -100,11 +101,19 @@ export class Game {
 
     this.el.startBtn.addEventListener('click', () => void this.begin())
     this.el.resumeBtn.addEventListener('click', () => this.resume())
+    this.el.muteBtn.addEventListener('click', () => {
+      void this.audio.ensure().then(() => this.syncMuteUi(this.audio.toggleMute()))
+    })
     this.bindTouchWeapons()
     window.addEventListener('keydown', this.onGlobalKey)
     window.addEventListener('resize', this.resize)
     this.resize()
     this.showTitle()
+  }
+
+  private syncMuteUi(muted: boolean) {
+    this.el.muteBtn.textContent = muted ? 'Sound Off' : 'Sound On'
+    this.el.muteBtn.setAttribute('aria-pressed', muted ? 'true' : 'false')
   }
 
   private bindTouchWeapons() {
@@ -188,6 +197,9 @@ export class Game {
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       if (this.mode === 'playing') this.pause()
       else if (this.mode === 'paused') this.resume()
+    }
+    if (e.key === 'm' || e.key === 'M') {
+      void this.audio.ensure().then(() => this.syncMuteUi(this.audio.toggleMute()))
     }
     if (e.key === 'Enter' && (this.mode === 'title' || this.mode === 'over')) {
       e.preventDefault()
@@ -445,8 +457,11 @@ export class Game {
       this.audio.boost()
     }
 
-    this.audio.setWindIntensity(
-      clamp(Math.hypot(this.player.vx, this.player.vy) / 480, 0, 1),
+    const speedNorm = clamp(Math.hypot(this.player.vx, this.player.vy) / 480, 0, 1)
+    this.audio.setWindIntensity(speedNorm)
+    this.audio.setEngine(
+      speedNorm,
+      this.input.boostHeld && this.player.boost > 0.05,
     )
 
     const ram = this.world.enemyCollision(
@@ -523,6 +538,7 @@ export class Game {
     )
     this.world.enemies.push(boss)
     this.toast(`BOSS — ${lv.bossName}`, 3)
+    this.audio.bossStinger()
     this.audio.levelUp()
     this.el.bossWrap.classList.remove('hidden')
     this.shake = Math.max(this.shake, 12)

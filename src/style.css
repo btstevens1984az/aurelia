@@ -161,6 +161,35 @@ body {
   box-shadow: 0 0 14px rgba(255, 107, 157, 0.45);
 }
 
+.mute-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 8;
+  appearance: none;
+  border: 1px solid rgba(255, 244, 224, 0.22);
+  background: rgba(10, 22, 40, 0.55);
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.mute-btn:hover {
+  border-color: rgba(244, 193, 93, 0.45);
+  color: var(--amber);
+}
+
+.mute-btn[aria-pressed='true'] {
+  opacity: 0.65;
+}
+
 .toast {
   position: absolute;
   left: 50%;
