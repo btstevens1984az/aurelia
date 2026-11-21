@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# keep docs/media tracked
+!docs/media/
+!docs/media/**
