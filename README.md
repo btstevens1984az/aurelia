@@ -1,6 +1,6 @@
 # AURELIA
 
-A dusk sky-glider you steer through lantern fields, thermals, crystal spires, and shadow flocks.
+Dreamy dusk jet combat — glide through lantern fields, dogfight enemy craft, and keep the open sky clear of crash barriers.
 
 ## Play
 
@@ -16,14 +16,20 @@ Open the local URL Vite prints (default `http://127.0.0.1:3847`).
 | Input | Action |
 | --- | --- |
 | WASD / Arrow keys | Steer |
-| Space / Shift | Boost (uses the ember bar) |
-| Drag / hold (touch) | Steer + boost |
+| Shift | Afterburner boost |
+| Space / J / Z / click | Twin guns |
+| K / F / X / right-click | Homing missile |
+| Touch buttons | Guns, missile, boost |
 | P / Esc | Pause |
-| Enter / Space | Start or retry from the menu |
+| Enter | Start or retry |
 
-## Goal
+## Combat
 
-Fly as far as you can. Collect lanterns, ride teal thermals, skim past danger for combo multipliers, and keep your boost topped up. Your best score is saved in the browser.
+- **Wraith**, **Mirage**, and **Titan** jets attack with guns and missiles
+- Destroy them for score and combo multipliers
+- Lanterns restore a little hull and reload a missile
+- Thermals still refill boost
+- There are **no terrain crash barriers** — only enemy contact and incoming fire can damage you
 
 ## Build
 

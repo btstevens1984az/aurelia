@@ -76,6 +76,42 @@ body {
   text-align: right;
 }
 
+.hud-subrow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.hud-subrow.right {
+  justify-content: flex-end;
+}
+
+.mini-bar {
+  width: 88px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 244, 224, 0.12);
+  overflow: hidden;
+}
+
+#hp-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e85d4c, #f4c15d);
+  box-shadow: 0 0 10px rgba(232, 93, 76, 0.35);
+}
+
+.hud-chip {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--amber);
+  min-width: 1.4rem;
+  text-align: right;
+}
+
 .hud-center {
   display: flex;
   justify-content: center;
@@ -123,7 +159,7 @@ body {
 #boost-bar {
   position: absolute;
   left: 50%;
-  bottom: 1.5rem;
+  bottom: 5.2rem;
   transform: translateX(-50%);
   width: min(220px, 46vw);
   height: 4px;
@@ -132,6 +168,50 @@ body {
   overflow: hidden;
   z-index: 2;
   pointer-events: none;
+}
+
+.touch-controls {
+  position: absolute;
+  right: 1rem;
+  bottom: 1.1rem;
+  z-index: 4;
+  display: flex;
+  gap: 0.55rem;
+  pointer-events: auto;
+}
+
+.touch-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 244, 224, 0.22);
+  background: rgba(10, 22, 40, 0.55);
+  color: var(--cream);
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.85rem 1rem;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-btn.accent {
+  border-color: rgba(244, 193, 93, 0.45);
+  color: var(--amber);
+}
+
+.touch-btn:active {
+  transform: scale(0.96);
+  background: rgba(224, 138, 74, 0.35);
+}
+
+@media (pointer: fine) {
+  .touch-controls {
+    opacity: 0.55;
+  }
 }
 
 #boost-fill {

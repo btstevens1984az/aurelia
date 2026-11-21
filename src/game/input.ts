@@ -2,10 +2,13 @@ export class Input {
   readonly keys = new Set<string>()
   pointerActive = false
   pointerBoost = false
+  pointerGun = false
+  pointerMissile = false
   pointerX = 0
   pointerY = 0
   private canvas: HTMLCanvasElement
   private bound = false
+  private missilePulse = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -23,6 +26,7 @@ export class Input {
     window.addEventListener('pointermove', this.onPointerMove)
     window.addEventListener('pointerup', this.onPointerUp)
     window.addEventListener('pointercancel', this.onPointerUp)
+    this.canvas.addEventListener('contextmenu', this.onContextMenu)
   }
 
   unbind() {
@@ -35,6 +39,7 @@ export class Input {
     window.removeEventListener('pointermove', this.onPointerMove)
     window.removeEventListener('pointerup', this.onPointerUp)
     window.removeEventListener('pointercancel', this.onPointerUp)
+    this.canvas.removeEventListener('contextmenu', this.onContextMenu)
   }
 
   get axis() {
@@ -48,16 +53,72 @@ export class Input {
   }
 
   get boostHeld() {
+    return this.keys.has('Shift') || this.pointerBoost
+  }
+
+  get gunHeld() {
     return (
       this.keys.has(' ') ||
-      this.keys.has('Shift') ||
-      this.pointerBoost
+      this.keys.has('j') ||
+      this.keys.has('J') ||
+      this.keys.has('z') ||
+      this.keys.has('Z') ||
+      this.pointerGun
     )
+  }
+
+  /** One-shot missile request; cleared when consumed. */
+  consumeMissile(): boolean {
+    const keyed =
+      this.keys.has('k') ||
+      this.keys.has('K') ||
+      this.keys.has('f') ||
+      this.keys.has('F') ||
+      this.keys.has('x') ||
+      this.keys.has('X')
+    if (this.missilePulse || this.pointerMissile || keyed) {
+      this.missilePulse = false
+      this.pointerMissile = false
+      // Allow hold-to-repeat via key still being down handled by gunCd style in game
+      return true
+    }
+    return false
+  }
+
+  get missileHeld() {
+    return (
+      this.keys.has('k') ||
+      this.keys.has('K') ||
+      this.keys.has('f') ||
+      this.keys.has('F') ||
+      this.keys.has('x') ||
+      this.keys.has('X') ||
+      this.pointerMissile
+    )
+  }
+
+  setTouchGun(active: boolean) {
+    this.pointerGun = active
+  }
+
+  setTouchMissile(active: boolean) {
+    if (active) this.pointerMissile = true
+  }
+
+  clearTouchMissile() {
+    this.pointerMissile = false
+  }
+
+  setTouchBoost(active: boolean) {
+    this.pointerBoost = active
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
       e.preventDefault()
+    }
+    if (e.key === 'k' || e.key === 'K' || e.key === 'f' || e.key === 'F' || e.key === 'x' || e.key === 'X') {
+      if (!this.keys.has(e.key)) this.missilePulse = true
     }
     this.keys.add(e.key)
   }
@@ -70,12 +131,24 @@ export class Input {
     this.keys.clear()
     this.pointerActive = false
     this.pointerBoost = false
+    this.pointerGun = false
+    this.pointerMissile = false
+  }
+
+  private onContextMenu = (e: Event) => {
+    e.preventDefault()
   }
 
   private onPointerDown = (e: PointerEvent) => {
+    // Touch UI buttons handle weapons; canvas drag steers + auto-guns
+    if ((e.target as HTMLElement)?.closest?.('.touch-btn')) return
     this.canvas.setPointerCapture(e.pointerId)
     this.pointerActive = true
-    this.pointerBoost = true
+    if (e.button === 2) {
+      this.pointerMissile = true
+    } else {
+      this.pointerGun = true
+    }
     this.updatePointer(e)
   }
 
@@ -84,9 +157,15 @@ export class Input {
     this.updatePointer(e)
   }
 
-  private onPointerUp = () => {
+  private onPointerUp = (e: PointerEvent) => {
     this.pointerActive = false
-    this.pointerBoost = false
+    if (e.button === 2) this.pointerMissile = false
+    else this.pointerGun = false
+    // Safety clear
+    if (e.type === 'pointercancel') {
+      this.pointerGun = false
+      this.pointerMissile = false
+    }
   }
 
   private updatePointer(e: PointerEvent) {

@@ -3,6 +3,7 @@ import { GameAudio } from './audio'
 import { ParticleSystem } from './particles'
 import { Player } from './player'
 import { World } from './world'
+import { CombatSystem, drawEnemy } from './combat'
 import { clamp, lerp, easeOutCubic } from './math'
 
 export type GameMode = 'title' | 'playing' | 'paused' | 'over'
@@ -17,6 +18,7 @@ export class Game {
   particles = new ParticleSystem()
   player = new Player()
   world = new World()
+  combat = new CombatSystem()
 
   mode: GameMode = 'title'
   width = 0
@@ -35,6 +37,7 @@ export class Game {
   thermalScoreTick = 0
   nearMissCooldown = 0
   boostSoundCooldown = 0
+  gunSoundCooldown = 0
   startOriginX = 0
 
   private raf = 0
@@ -48,6 +51,8 @@ export class Game {
     combo: document.getElementById('combo')!,
     boostBar: document.getElementById('boost-bar')!,
     boostFill: document.getElementById('boost-fill')!,
+    hpFill: document.getElementById('hp-fill')!,
+    missiles: document.getElementById('missiles')!,
     overlay: document.getElementById('overlay')!,
     pause: document.getElementById('pause')!,
     tagline: document.getElementById('tagline')!,
@@ -58,6 +63,10 @@ export class Game {
     bestScore: document.getElementById('best-score')!,
     finalDistance: document.getElementById('final-distance')!,
     touchHint: document.getElementById('touch-hint')!,
+    touchControls: document.getElementById('touch-controls')!,
+    btnGun: document.getElementById('btn-gun') as HTMLButtonElement,
+    btnMissile: document.getElementById('btn-missile') as HTMLButtonElement,
+    btnBoost: document.getElementById('btn-boost') as HTMLButtonElement,
   }
 
   constructor(canvas: HTMLCanvasElement) {
@@ -70,10 +79,55 @@ export class Game {
 
     this.el.startBtn.addEventListener('click', () => void this.begin())
     this.el.resumeBtn.addEventListener('click', () => this.resume())
+    this.bindTouchWeapons()
     window.addEventListener('keydown', this.onGlobalKey)
     window.addEventListener('resize', this.resize)
     this.resize()
     this.showTitle()
+  }
+
+  private bindTouchWeapons() {
+    const hold = (
+      btn: HTMLButtonElement,
+      on: () => void,
+      off: () => void,
+    ) => {
+      const start = (e: Event) => {
+        e.preventDefault()
+        e.stopPropagation()
+        on()
+      }
+      const end = (e: Event) => {
+        e.preventDefault()
+        e.stopPropagation()
+        off()
+      }
+      btn.addEventListener('pointerdown', start)
+      btn.addEventListener('pointerup', end)
+      btn.addEventListener('pointerleave', end)
+      btn.addEventListener('pointercancel', end)
+    }
+
+    hold(
+      this.el.btnGun,
+      () => this.input.setTouchGun(true),
+      () => this.input.setTouchGun(false),
+    )
+    hold(
+      this.el.btnBoost,
+      () => this.input.setTouchBoost(true),
+      () => this.input.setTouchBoost(false),
+    )
+    this.el.btnMissile.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.input.setTouchMissile(true)
+    })
+    this.el.btnMissile.addEventListener('pointerup', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.input.clearTouchMissile()
+    })
   }
 
   startLoop() {
@@ -113,7 +167,7 @@ export class Game {
       if (this.mode === 'playing') this.pause()
       else if (this.mode === 'paused') this.resume()
     }
-    if ((e.key === 'Enter' || e.key === ' ') && (this.mode === 'title' || this.mode === 'over')) {
+    if (e.key === 'Enter' && (this.mode === 'title' || this.mode === 'over')) {
       e.preventDefault()
       void this.begin()
     }
@@ -125,9 +179,10 @@ export class Game {
     this.el.pause.classList.add('hidden')
     this.el.hud.classList.add('hidden')
     this.el.boostBar.classList.add('hidden')
+    this.el.touchControls.classList.add('hidden')
     this.el.menuStats.classList.add('hidden')
-    this.el.tagline.textContent = 'Ride the dusk winds. Gather the lanterns.'
-    this.el.startBtn.textContent = 'Begin Flight'
+    this.el.tagline.textContent = 'Dream skies. Real dogfights. Clear air ahead.'
+    this.el.startBtn.textContent = 'Begin Sortie'
     this.el.touchHint.classList.add('hidden')
     this.seedTitleScene()
   }
@@ -135,6 +190,7 @@ export class Game {
   private seedTitleScene() {
     this.world.reset(this.width, this.height)
     this.particles.clear()
+    this.combat.clear()
     this.player.reset(this.width * 0.35, this.height * 0.48)
     this.camX = 0
     this.camY = 0
@@ -154,7 +210,9 @@ export class Game {
     this.thermalScoreTick = 0
     this.nearMissCooldown = 0
     this.boostSoundCooldown = 0
+    this.gunSoundCooldown = 0
     this.particles.clear()
+    this.combat.clear()
     this.world.reset(this.width, this.height)
     this.player.reset(this.width * 0.32, this.height * 0.5)
     this.startOriginX = this.player.x
@@ -165,6 +223,7 @@ export class Game {
     this.el.pause.classList.add('hidden')
     this.el.hud.classList.remove('hidden')
     this.el.boostBar.classList.remove('hidden')
+    this.el.touchControls.classList.remove('hidden')
     this.el.touchHint.classList.remove('hidden')
     this.syncHud()
   }
@@ -208,6 +267,7 @@ export class Game {
 
     this.el.hud.classList.add('hidden')
     this.el.boostBar.classList.add('hidden')
+    this.el.touchControls.classList.add('hidden')
     this.el.menuStats.classList.remove('hidden')
     this.el.finalScore.textContent = String(Math.floor(this.score))
     this.el.bestScore.textContent = String(Math.floor(this.best))
@@ -215,7 +275,7 @@ export class Game {
     this.el.tagline.textContent =
       this.score >= this.best && this.score > 0
         ? 'A new horizon. The dusk remembers you.'
-        : 'The wind takes you. Rise again.'
+        : 'Hull breached. Climb again.'
     this.el.startBtn.textContent = 'Fly Again'
     this.el.overlay.classList.remove('hidden')
   }
@@ -242,13 +302,13 @@ export class Game {
     const inThermal = this.world.inThermal(this.player.x, this.player.y)
     this.player.update(dt, this.input, this.particles, this.width, this.height, inThermal)
 
-    // Camera with soft lag and look-ahead
     const targetCamX = this.player.x - this.width * 0.32
     const targetCamY = (this.player.y - this.height * 0.5) * 0.15
     this.camX = lerp(this.camX, targetCamX, 1 - Math.pow(0.0008, dt))
     this.camY = lerp(this.camY, targetCamY, 1 - Math.pow(0.01, dt))
 
     this.world.update(dt, this.camX, this.width, this.height, difficulty)
+    this.updateCombat(dt, difficulty)
     this.particles.update(dt)
 
     this.distance = Math.max(0, (this.player.x - this.startOriginX) / 10)
@@ -280,6 +340,11 @@ export class Game {
       this.combo = Math.min(8, this.combo + 1)
       this.comboTimer = 2.4
       this.score += l.worth * this.combo
+      this.player.missiles = Math.min(
+        this.player.maxMissiles,
+        this.player.missiles + 1,
+      )
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 4)
       this.audio.collect()
       this.particles.burst(l.x, l.y, 16, { speed: 140, hue: 42, kind: 'spark' })
       this.flash = Math.max(this.flash, 0.12)
@@ -291,7 +356,7 @@ export class Game {
     this.nearMissCooldown -= dt
     if (
       this.nearMissCooldown <= 0 &&
-      this.world.nearMiss(this.player.x, this.player.y, this.player.radius)
+      this.world.nearMissEnemy(this.player.x, this.player.y, this.player.radius)
     ) {
       this.nearMissCooldown = 0.55
       this.combo = Math.min(8, this.combo + 1)
@@ -319,20 +384,144 @@ export class Game {
       clamp(Math.hypot(this.player.vx, this.player.vy) / 480, 0, 1),
     )
 
-    if (
-      this.player.invuln <= 0 &&
-      this.world.hitObstacle(this.player.x, this.player.y, this.player.radius)
-    ) {
-      this.gameOver()
+    // Ramming enemy jets damages hull — no invisible terrain barriers
+    const ram = this.world.enemyCollision(
+      this.player.x,
+      this.player.y,
+      this.player.radius,
+    )
+    if (ram && this.player.invuln <= 0) {
+      const dead = this.player.takeDamage(18)
+      this.audio.damage()
+      this.shake = Math.max(this.shake, 8)
+      this.flash = Math.max(this.flash, 0.25)
+      ram.hp -= 25
+      this.particles.burst(this.player.x, this.player.y, 12, {
+        speed: 160,
+        hue: 15,
+        kind: 'ember',
+      })
+      if (ram.hp <= 0) this.destroyEnemy(ram)
+      if (dead) this.gameOver()
     }
 
     this.syncHud()
+  }
+
+  private updateCombat(dt: number, difficulty: number) {
+    // Player guns
+    if (this.input.gunHeld && this.player.gunCd <= 0 && this.player.alive) {
+      this.player.gunCd = 0.09
+      const noseX = this.player.x + Math.cos(this.player.angle) * 22
+      const noseY = this.player.y + Math.sin(this.player.angle) * 22
+      this.combat.fireGun(noseX, noseY - 4, this.player.angle, true)
+      this.combat.fireGun(noseX, noseY + 4, this.player.angle, true)
+      this.gunSoundCooldown -= dt
+      if (this.gunSoundCooldown <= 0) {
+        this.gunSoundCooldown = 0.07
+        this.audio.gun()
+      }
+    } else {
+      this.gunSoundCooldown = 0
+    }
+
+    // Player missiles
+    if (
+      this.player.alive &&
+      this.player.missileCd <= 0 &&
+      this.player.missiles > 0 &&
+      this.input.missileHeld
+    ) {
+      this.player.missileCd = 0.55
+      this.player.missiles -= 1
+      const noseX = this.player.x + Math.cos(this.player.angle) * 18
+      const noseY = this.player.y + Math.sin(this.player.angle) * 18
+      this.combat.fireMissile(noseX, noseY, this.player.angle, true)
+      this.input.clearTouchMissile()
+      this.audio.missile()
+    }
+
+    // Enemy AI fire
+    for (const e of this.world.enemies) {
+      if (e.hp <= 0 || e.fireCd > 0) continue
+      const dx = this.player.x - e.x
+      if (dx > 40 || dx < -520) continue
+      const aim = Math.atan2(this.player.y - e.y, this.player.x - e.x)
+      if (e.kind === 'titan') {
+        e.fireCd = Math.max(0.7, 1.4 - difficulty * 0.12)
+        this.combat.fireMissile(e.x, e.y, aim, false)
+        this.combat.fireGun(e.x, e.y, aim + 0.1, false)
+        this.combat.fireGun(e.x, e.y, aim - 0.1, false)
+      } else if (e.kind === 'mirage') {
+        e.fireCd = Math.max(0.28, 0.55 - difficulty * 0.05)
+        this.combat.fireGun(e.x, e.y, aim, false)
+        this.combat.fireGun(e.x, e.y, aim + 0.12, false)
+      } else {
+        e.fireCd = Math.max(0.45, 0.9 - difficulty * 0.08)
+        this.combat.fireGun(e.x, e.y, aim, false)
+      }
+    }
+
+    this.combat.update(dt, this.world.enemies)
+    this.combat.guideEnemyMissiles(this.player.x, this.player.y, dt)
+
+    const hits = this.combat.hitEnemies(this.world.enemies)
+    for (const h of hits) {
+      h.enemy.hp -= h.damage
+      this.particles.burst(h.x, h.y, h.kind === 'missile' ? 18 : 6, {
+        speed: h.kind === 'missile' ? 200 : 100,
+        hue: h.kind === 'missile' ? 28 : 45,
+        kind: 'spark',
+      })
+      if (h.enemy.hp <= 0) this.destroyEnemy(h.enemy)
+    }
+
+    const dmg = this.combat.hitPlayer(
+      this.player.x,
+      this.player.y,
+      this.player.radius,
+    )
+    if (dmg > 0) {
+      const dead = this.player.takeDamage(dmg)
+      this.audio.damage()
+      this.shake = Math.max(this.shake, 6)
+      this.flash = Math.max(this.flash, 0.2)
+      this.particles.burst(this.player.x, this.player.y, 10, {
+        speed: 140,
+        hue: 10,
+        kind: 'ember',
+      })
+      if (dead) this.gameOver()
+    }
+  }
+
+  private destroyEnemy(e: { x: number; y: number; score: number; hp: number }) {
+    e.hp = 0
+    this.combo = Math.min(8, this.combo + 1)
+    this.comboTimer = 2.6
+    this.score += e.score * this.combo
+    this.audio.explosion()
+    this.shake = Math.max(this.shake, 5)
+    this.particles.burst(e.x, e.y, 28, {
+      speed: 220,
+      hue: 20,
+      kind: 'ember',
+      size: 3.2,
+    })
+    this.particles.burst(e.x, e.y, 4, {
+      speed: 60,
+      kind: 'shock',
+      size: 22,
+      hue: 15,
+    })
   }
 
   private syncHud() {
     this.el.score.textContent = String(Math.floor(this.score))
     this.el.distance.textContent = `${Math.floor(this.distance)}m`
     this.el.boostFill.style.width = `${Math.floor(this.player.boost * 100)}%`
+    this.el.hpFill.style.width = `${Math.floor((this.player.hp / this.player.maxHp) * 100)}%`
+    this.el.missiles.textContent = String(this.player.missiles)
     if (this.combo > 1) {
       this.el.combo.textContent = `×${this.combo}`
       this.el.combo.classList.remove('hidden')
@@ -350,7 +539,6 @@ export class Game {
     const camX = this.camX + shakeX
     const camY = this.camY + shakeY
 
-    // Sky
     const sky = ctx.createLinearGradient(0, 0, 0, h)
     sky.addColorStop(0, '#070e1a')
     sky.addColorStop(0.35, '#122038')
@@ -360,7 +548,6 @@ export class Game {
     ctx.fillStyle = sky
     ctx.fillRect(0, 0, w, h)
 
-    // Soft sun / afterglow
     const sunX = w * 0.72
     const sunY = h * 0.72
     const sun = ctx.createRadialGradient(sunX, sunY, 10, sunX, sunY, h * 0.55)
@@ -370,11 +557,9 @@ export class Game {
     ctx.fillStyle = sun
     ctx.fillRect(0, 0, w, h)
 
-    // Far mountains
     this.drawMountains(ctx, this.world.mountainsFar, camX * 0.25, h, '#141e30', 0.9)
     this.drawMountains(ctx, this.world.mountainsNear, camX * 0.45, h, '#0d1524', 1)
 
-    // Floating motes / dust
     for (const m of this.world.motes) {
       const x = m.x - camX * m.z
       const y = m.y - camY * m.z * 0.4 + Math.sin(this.time + m.phase) * 3
@@ -386,7 +571,6 @@ export class Game {
     }
     ctx.globalAlpha = 1
 
-    // Thermals
     for (const t of this.world.thermals) {
       const x = t.x - camX
       const y = t.y - camY
@@ -409,73 +593,6 @@ export class Game {
       }
       ctx.closePath()
       ctx.fill()
-
-      ctx.strokeStyle = 'rgba(94, 200, 192, 0.18)'
-      ctx.lineWidth = 1
-      for (let i = 0; i < 3; i++) {
-        const ox = x + t.w * (0.25 + i * 0.25)
-        ctx.beginPath()
-        for (let s = 0; s <= 12; s++) {
-          const py = y + t.h - (t.h * s) / 12
-          const px = ox + Math.sin(this.time * 2.4 + i + s * 0.45 + t.phase) * 7
-          if (s === 0) ctx.moveTo(px, py)
-          else ctx.lineTo(px, py)
-        }
-        ctx.stroke()
-      }
-    }
-
-    // Spires
-    for (const s of this.world.spires) {
-      const x = s.x - camX
-      const y = s.y - camY
-      const grad = ctx.createLinearGradient(x, y, x + s.w, y)
-      grad.addColorStop(0, '#1a2438')
-      grad.addColorStop(0.5, '#2a3348')
-      grad.addColorStop(1, '#121a28')
-      ctx.fillStyle = grad
-      ctx.beginPath()
-      if (s.tip > 0) {
-        ctx.moveTo(x, y)
-        ctx.lineTo(x + s.w, y)
-        ctx.lineTo(x + s.w * 0.72, y + s.h)
-        ctx.lineTo(x + s.w * 0.28, y + s.h)
-      } else {
-        ctx.moveTo(x + s.w * 0.28, y)
-        ctx.lineTo(x + s.w * 0.72, y)
-        ctx.lineTo(x + s.w, y + s.h)
-        ctx.lineTo(x, y + s.h)
-      }
-      ctx.closePath()
-      ctx.fill()
-
-      ctx.strokeStyle = 'rgba(232, 93, 76, 0.35)'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-    }
-
-    // Birds
-    for (const b of this.world.birds) {
-      const x = b.x - camX
-      const y = b.y - camY
-      const flap = Math.sin(b.phase * 2) * 0.5
-      ctx.save()
-      ctx.translate(x, y)
-      ctx.fillStyle = '#0a101c'
-      ctx.beginPath()
-      ctx.ellipse(0, 0, 10, 4, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.beginPath()
-      ctx.moveTo(-2, 0)
-      ctx.quadraticCurveTo(-8, -14 - flap * 8, -20, -2)
-      ctx.quadraticCurveTo(-10, -2, -2, 0)
-      ctx.fill()
-      ctx.beginPath()
-      ctx.moveTo(-2, 0)
-      ctx.quadraticCurveTo(-8, 14 + flap * 8, -20, 2)
-      ctx.quadraticCurveTo(-10, 2, -2, 0)
-      ctx.fill()
-      ctx.restore()
     }
 
     // Lanterns
@@ -491,31 +608,26 @@ export class Game {
       ctx.beginPath()
       ctx.arc(x, y, l.r * 3.2, 0, Math.PI * 2)
       ctx.fill()
-
       ctx.fillStyle = '#fff4e0'
       ctx.beginPath()
       ctx.arc(x, y, l.r * 0.55, 0, Math.PI * 2)
       ctx.fill()
-
       ctx.strokeStyle = 'rgba(244, 193, 93, 0.9)'
       ctx.lineWidth = 1.5
       ctx.beginPath()
       ctx.arc(x, y, l.r, 0, Math.PI * 2)
       ctx.stroke()
-
-      // Tiny hanging cord
-      ctx.strokeStyle = 'rgba(255, 244, 224, 0.35)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(x, y + l.r)
-      ctx.lineTo(x, y + l.r + 8)
-      ctx.stroke()
     }
 
+    for (const e of this.world.enemies) {
+      if (e.hp <= 0) continue
+      drawEnemy(ctx, e, camX, camY, this.time)
+    }
+
+    this.combat.draw(ctx, camX, camY)
     this.particles.draw(ctx, camX, camY)
     this.player.draw(ctx, camX, camY, this.time)
 
-    // Vignette
     const vig = ctx.createRadialGradient(
       w * 0.5,
       h * 0.45,
@@ -534,7 +646,6 @@ export class Game {
       ctx.fillRect(0, 0, w, h)
     }
 
-    // Title idle caption
     if (this.mode === 'title') {
       const t = easeOutCubic(clamp((this.time % 6) / 2, 0, 1))
       ctx.globalAlpha = 0.15 + t * 0.1

@@ -66,6 +66,35 @@ export class GameAudio {
     this.chime(880, 0.05, 'sine', 0.06)
   }
 
+  gun() {
+    this.chime(920, 0.035, 'square', 0.035)
+  }
+
+  missile() {
+    this.chime(180, 0.12, 'sawtooth', 0.07)
+    this.chime(90, 0.2, 'sine', 0.05)
+  }
+
+  explosion() {
+    if (!this.ctx || !this.master) return
+    const t = this.ctx.currentTime
+    const osc = this.ctx.createOscillator()
+    const gain = this.ctx.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(220, t)
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.28)
+    gain.gain.setValueAtTime(0.14, t)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28)
+    osc.connect(gain)
+    gain.connect(this.master)
+    osc.start(t)
+    osc.stop(t + 0.32)
+  }
+
+  damage() {
+    this.chime(160, 0.1, 'square', 0.08)
+  }
+
   hit() {
     if (!this.ctx || !this.master) return
     const t = this.ctx.currentTime

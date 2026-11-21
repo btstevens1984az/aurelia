@@ -1,4 +1,5 @@
-import { clamp, dist, rand, randInt } from './math'
+import { dist, rand, randInt } from './math'
+import { createEnemy, type Enemy, type EnemyKind } from './combat'
 
 export type Lantern = {
   x: number
@@ -17,23 +18,6 @@ export type Thermal = {
   phase: number
 }
 
-export type Spire = {
-  x: number
-  y: number
-  w: number
-  h: number
-  tip: number
-}
-
-export type Bird = {
-  x: number
-  y: number
-  vx: number
-  vy: number
-  phase: number
-  r: number
-}
-
 export type Mote = {
   x: number
   y: number
@@ -45,30 +29,26 @@ export type Mote = {
 export class World {
   lanterns: Lantern[] = []
   thermals: Thermal[] = []
-  spires: Spire[] = []
-  birds: Bird[] = []
+  enemies: Enemy[] = []
   motes: Mote[] = []
   mountainsFar: { x: number; h: number }[] = []
   mountainsNear: { x: number; h: number }[] = []
 
   private nextLanternX = 0
   private nextThermalX = 0
-  private nextSpireX = 0
-  private nextBirdX = 0
+  private nextEnemyX = 0
   private scrollMax = 0
 
   reset(viewW: number, viewH: number) {
     this.lanterns = []
     this.thermals = []
-    this.spires = []
-    this.birds = []
+    this.enemies = []
     this.motes = []
     this.mountainsFar = []
     this.mountainsNear = []
     this.nextLanternX = viewW * 0.7
     this.nextThermalX = viewW * 0.9
-    this.nextSpireX = viewW * 1.4
-    this.nextBirdX = viewW * 2.2
+    this.nextEnemyX = viewW * 1.6
     this.scrollMax = 0
 
     for (let i = 0; i < 28; i++) {
@@ -86,7 +66,6 @@ export class World {
       })
     }
 
-    // Opening breath of lanterns
     for (let i = 0; i < 5; i++) {
       this.spawnLantern(viewW * 0.55 + i * 140, viewH)
     }
@@ -97,7 +76,7 @@ export class World {
 
     while (this.nextLanternX < this.scrollMax + viewW) {
       this.spawnLantern(this.nextLanternX, viewH)
-      this.nextLanternX += rand(110, 200) / (1 + difficulty * 0.08)
+      this.nextLanternX += rand(130, 230) / (1 + difficulty * 0.06)
     }
 
     while (this.nextThermalX < this.scrollMax + viewW) {
@@ -105,20 +84,26 @@ export class World {
       this.nextThermalX += rand(420, 720)
     }
 
-    while (this.nextSpireX < this.scrollMax + viewW) {
-      this.spawnSpire(this.nextSpireX, viewH, difficulty)
-      this.nextSpireX += rand(260, 480) / (1 + difficulty * 0.05)
+    while (this.nextEnemyX < this.scrollMax + viewW) {
+      this.spawnEnemyWave(this.nextEnemyX, viewH, difficulty)
+      this.nextEnemyX += rand(320, 560) / (1 + difficulty * 0.1)
     }
 
-    while (this.nextBirdX < this.scrollMax + viewW) {
-      this.spawnBird(this.nextBirdX, viewH, difficulty)
-      this.nextBirdX += rand(380, 700) / (1 + difficulty * 0.12)
-    }
-
-    for (const b of this.birds) {
-      b.x += b.vx * dt
-      b.y += b.vy * dt + Math.sin(b.phase) * 18 * dt
-      b.phase += dt * 3
+    for (const e of this.enemies) {
+      if (e.hp <= 0) continue
+      e.phase += dt * (e.kind === 'mirage' ? 4.2 : 2.4)
+      if (e.kind === 'mirage') {
+        e.vy = Math.sin(e.phase) * (90 + difficulty * 10)
+      } else if (e.kind === 'titan') {
+        e.vy += Math.sin(e.phase * 0.6) * 20 * dt
+      } else {
+        e.vy += Math.sin(e.phase) * 28 * dt
+      }
+      e.x += e.vx * dt
+      e.y += e.vy * dt
+      e.y = Math.max(40, Math.min(viewH - 40, e.y))
+      e.angle = Math.atan2(e.vy, e.vx)
+      e.fireCd = Math.max(0, e.fireCd - dt)
     }
 
     for (const m of this.motes) {
@@ -130,22 +115,23 @@ export class World {
       }
     }
 
-    // Recycle mountain segments
     for (const chain of [this.mountainsFar, this.mountainsNear]) {
       for (const m of chain) {
         if (m.x < camX - 400) {
           const maxX = Math.max(...chain.map((c) => c.x))
           m.x = maxX + (chain === this.mountainsFar ? 180 : 140)
-          m.h = rand(chain === this.mountainsFar ? 80 : 60, chain === this.mountainsFar ? 180 : 140)
+          m.h = rand(
+            chain === this.mountainsFar ? 80 : 60,
+            chain === this.mountainsFar ? 180 : 140,
+          )
         }
       }
     }
 
-    const cullLeft = camX - 200
+    const cullLeft = camX - 220
     this.lanterns = this.lanterns.filter((l) => !l.collected && l.x > cullLeft)
     this.thermals = this.thermals.filter((t) => t.x + t.w > cullLeft)
-    this.spires = this.spires.filter((s) => s.x + s.w > cullLeft)
-    this.birds = this.birds.filter((b) => b.x > cullLeft - 100)
+    this.enemies = this.enemies.filter((e) => e.hp > 0 && e.x > cullLeft - 120)
   }
 
   private spawnLantern(x: number, viewH: number) {
@@ -173,30 +159,29 @@ export class World {
     })
   }
 
-  private spawnSpire(x: number, viewH: number, difficulty: number) {
-    const fromTop = Math.random() < 0.5
-    const h = rand(viewH * 0.22, viewH * (0.38 + difficulty * 0.03))
-    this.spires.push({
-      x,
-      y: fromTop ? 0 : viewH - h,
-      w: rand(28, 48),
-      h,
-      tip: fromTop ? 1 : -1,
-    })
-  }
+  private spawnEnemyWave(x: number, viewH: number, difficulty: number) {
+    const roll = Math.random()
+    let kind: EnemyKind = 'wraith'
+    if (roll > 0.82 - difficulty * 0.04) kind = 'titan'
+    else if (roll > 0.48) kind = 'mirage'
 
-  private spawnBird(x: number, viewH: number, difficulty: number) {
-    const count = Math.random() < 0.35 + difficulty * 0.04 ? randInt(2, 4) : 1
-    const baseY = rand(viewH * 0.2, viewH * 0.8)
+    const count =
+      kind === 'titan'
+        ? 1
+        : kind === 'mirage'
+          ? randInt(1, 2 + Math.floor(difficulty * 0.4))
+          : randInt(1, 2 + Math.floor(difficulty * 0.5))
+
+    const baseY = rand(viewH * 0.18, viewH * 0.82)
     for (let i = 0; i < count; i++) {
-      this.birds.push({
-        x: x + i * 34,
-        y: baseY + i * rand(-18, 18),
-        vx: -rand(40, 90 + difficulty * 10),
-        vy: rand(-20, 20),
-        phase: rand(0, Math.PI * 2),
-        r: 12,
-      })
+      this.enemies.push(
+        createEnemy(
+          kind,
+          x + i * 56,
+          baseY + i * rand(-36, 36),
+          difficulty,
+        ),
+      )
     }
   }
 
@@ -219,28 +204,21 @@ export class World {
     return got
   }
 
-  hitObstacle(px: number, py: number, pr: number) {
-    for (const s of this.spires) {
-      const cx = clamp(px, s.x, s.x + s.w)
-      const cy = clamp(py, s.y, s.y + s.h)
-      if (dist(px, py, cx, cy) < pr * 0.85) return true
+  /** Soft contact with enemy jets — no environmental barriers. */
+  enemyCollision(px: number, py: number, pr: number) {
+    for (const e of this.enemies) {
+      if (e.hp <= 0) continue
+      if (dist(px, py, e.x, e.y) < pr + e.r * 0.75) return e
     }
-    for (const b of this.birds) {
-      if (dist(px, py, b.x, b.y) < pr + b.r * 0.7) return true
-    }
-    return false
+    return null
   }
 
-  nearMiss(px: number, py: number, pr: number) {
+  nearMissEnemy(px: number, py: number, pr: number) {
     let closest = Infinity
-    for (const s of this.spires) {
-      const cx = clamp(px, s.x, s.x + s.w)
-      const cy = clamp(py, s.y, s.y + s.h)
-      closest = Math.min(closest, dist(px, py, cx, cy) - pr)
+    for (const e of this.enemies) {
+      if (e.hp <= 0) continue
+      closest = Math.min(closest, dist(px, py, e.x, e.y) - pr - e.r)
     }
-    for (const b of this.birds) {
-      closest = Math.min(closest, dist(px, py, b.x, b.y) - pr - b.r)
-    }
-    return closest > 0 && closest < 28
+    return closest > 0 && closest < 30
   }
 }

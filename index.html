@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0a1628" />
-    <title>AURELIA — Ride the Dusk Winds</title>
+    <title>AURELIA — Dusk Jet Combat</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,6 +21,10 @@
         <div class="hud-left">
           <div class="hud-label">Score</div>
           <div id="score" class="hud-value">0</div>
+          <div class="hud-subrow">
+            <span class="hud-label">Hull</span>
+            <div id="hp-bar" class="mini-bar"><div id="hp-fill"></div></div>
+          </div>
         </div>
         <div class="hud-center">
           <div id="combo" class="combo hidden">×2</div>
@@ -28,6 +32,10 @@
         <div class="hud-right">
           <div class="hud-label">Distance</div>
           <div id="distance" class="hud-value">0m</div>
+          <div class="hud-subrow right">
+            <span class="hud-label">Missiles</span>
+            <span id="missiles" class="hud-chip">6</span>
+          </div>
         </div>
       </div>
 
@@ -35,11 +43,17 @@
         <div id="boost-fill"></div>
       </div>
 
+      <div id="touch-controls" class="touch-controls hidden">
+        <button type="button" id="btn-gun" class="touch-btn">Guns</button>
+        <button type="button" id="btn-missile" class="touch-btn accent">Missile</button>
+        <button type="button" id="btn-boost" class="touch-btn">Boost</button>
+      </div>
+
       <div id="overlay" class="overlay">
         <div class="overlay-inner">
-          <p class="eyebrow">A sky glider</p>
+          <p class="eyebrow">Dusk jet combat</p>
           <h1 class="brand">AURELIA</h1>
-          <p id="tagline" class="tagline">Ride the dusk winds. Gather the lanterns.</p>
+          <p id="tagline" class="tagline">Dream skies. Real dogfights. Clear air ahead.</p>
           <div id="menu-stats" class="menu-stats hidden">
             <div>
               <span class="stat-label">Score</span>
@@ -54,9 +68,9 @@
               <span id="final-distance" class="stat-value">0m</span>
             </div>
           </div>
-          <button id="start-btn" type="button" class="cta">Begin Flight</button>
+          <button id="start-btn" type="button" class="cta">Begin Sortie</button>
           <p id="hint" class="hint">
-            WASD / Arrows to steer · Space to boost · P to pause
+            WASD steer · Shift boost · Space / J guns · K / F missiles · P pause
           </p>
         </div>
       </div>
@@ -64,12 +78,12 @@
       <div id="pause" class="overlay hidden">
         <div class="overlay-inner compact">
           <h2 class="pause-title">Paused</h2>
-          <p class="tagline">The wind holds still.</p>
+          <p class="tagline">Engines idle in the dusk.</p>
           <button id="resume-btn" type="button" class="cta">Resume</button>
         </div>
       </div>
 
-      <div id="touch-hint" class="touch-hint hidden">Drag to steer · Hold for boost</div>
+      <div id="touch-hint" class="touch-hint hidden">Drag to steer · Guns &amp; missiles below</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
