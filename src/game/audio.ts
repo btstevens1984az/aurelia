@@ -91,6 +91,40 @@ export class GameAudio {
     osc.stop(t + 0.32)
   }
 
+  megaBoom() {
+    if (!this.ctx || !this.master) return
+    const t = this.ctx.currentTime
+    for (const [freq, dur, vol, type] of [
+      [90, 0.55, 0.22, 'sawtooth'],
+      [55, 0.7, 0.18, 'square'],
+      [180, 0.35, 0.1, 'triangle'],
+    ] as const) {
+      const osc = this.ctx.createOscillator()
+      const gain = this.ctx.createGain()
+      osc.type = type
+      osc.frequency.setValueAtTime(freq, t)
+      osc.frequency.exponentialRampToValueAtTime(28, t + dur)
+      gain.gain.setValueAtTime(vol, t)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + dur)
+      osc.connect(gain)
+      gain.connect(this.master)
+      osc.start(t)
+      osc.stop(t + dur + 0.02)
+    }
+  }
+
+  pickup() {
+    this.chime(520, 0.1, 'triangle', 0.1)
+    this.chime(780, 0.16, 'sine', 0.08)
+  }
+
+  levelUp() {
+    this.chime(392, 0.15, 'sine', 0.1)
+    this.chime(523, 0.2, 'triangle', 0.09)
+    this.chime(659, 0.28, 'sine', 0.08)
+    this.chime(784, 0.4, 'sine', 0.07)
+  }
+
   damage() {
     this.chime(160, 0.1, 'square', 0.08)
   }

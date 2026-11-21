@@ -25,19 +25,34 @@
             <span class="hud-label">Hull</span>
             <div id="hp-bar" class="mini-bar"><div id="hp-fill"></div></div>
           </div>
+          <div class="hud-subrow">
+            <span class="hud-label">Weapon</span>
+            <span id="weapon" class="hud-chip weapon">Twin</span>
+          </div>
         </div>
         <div class="hud-center">
+          <div id="level-banner" class="level-banner">Lv 1 · Ember Gate</div>
           <div id="combo" class="combo hidden">×2</div>
+          <div id="boss-bar-wrap" class="boss-bar-wrap hidden">
+            <div id="boss-name" class="boss-name">Boss</div>
+            <div class="boss-bar"><div id="boss-fill"></div></div>
+          </div>
         </div>
         <div class="hud-right">
-          <div class="hud-label">Distance</div>
-          <div id="distance" class="hud-value">0m</div>
+          <div class="hud-label">Level Kills</div>
+          <div id="kills" class="hud-value">0/12</div>
           <div class="hud-subrow right">
             <span class="hud-label">Missiles</span>
             <span id="missiles" class="hud-chip">6</span>
           </div>
+          <div class="hud-subrow right">
+            <span class="hud-label">Distance</span>
+            <span id="distance" class="hud-chip muted">0m</span>
+          </div>
         </div>
       </div>
+
+      <div id="toast" class="toast hidden"></div>
 
       <div id="boost-bar" class="hidden" aria-hidden="true">
         <div id="boost-fill"></div>
@@ -46,6 +61,7 @@
       <div id="touch-controls" class="touch-controls hidden">
         <button type="button" id="btn-gun" class="touch-btn">Guns</button>
         <button type="button" id="btn-missile" class="touch-btn accent">Missile</button>
+        <button type="button" id="btn-weapon" class="touch-btn">Swap</button>
         <button type="button" id="btn-boost" class="touch-btn">Boost</button>
       </div>
 
@@ -53,7 +69,9 @@
         <div class="overlay-inner">
           <p class="eyebrow">Dusk jet combat</p>
           <h1 class="brand">AURELIA</h1>
-          <p id="tagline" class="tagline">Dream skies. Real dogfights. Clear air ahead.</p>
+          <p id="tagline" class="tagline">
+            Levels. Bosses. Absurd explosions. Air packages raining firepower.
+          </p>
           <div id="menu-stats" class="menu-stats hidden">
             <div>
               <span class="stat-label">Score</span>
@@ -64,13 +82,13 @@
               <span id="best-score" class="stat-value">0</span>
             </div>
             <div>
-              <span class="stat-label">Distance</span>
-              <span id="final-distance" class="stat-value">0m</span>
+              <span class="stat-label">Level</span>
+              <span id="final-level" class="stat-value">1</span>
             </div>
           </div>
           <button id="start-btn" type="button" class="cta">Begin Sortie</button>
           <p id="hint" class="hint">
-            WASD steer · Shift boost · Space / J guns · K / F missiles · P pause
+            WASD · Shift boost · Space guns · K missiles · Q/E swap weapons · every 5 kills unlocks a gun
           </p>
         </div>
       </div>
@@ -83,7 +101,7 @@
         </div>
       </div>
 
-      <div id="touch-hint" class="touch-hint hidden">Drag to steer · Guns &amp; missiles below</div>
+      <div id="touch-hint" class="touch-hint hidden">Drag to steer · Combat buttons below</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

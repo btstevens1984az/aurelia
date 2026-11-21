@@ -112,6 +112,87 @@ body {
   text-align: right;
 }
 
+.hud-chip.weapon {
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-align: left;
+}
+
+.hud-chip.muted {
+  color: var(--mist);
+  font-size: 0.95rem;
+}
+
+.level-banner {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-style: italic;
+  color: var(--cream);
+  opacity: 0.9;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.45);
+  margin-bottom: 0.35rem;
+}
+
+.boss-bar-wrap {
+  margin-top: 0.4rem;
+  min-width: min(280px, 46vw);
+}
+
+.boss-name {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff6b9d;
+  margin-bottom: 0.25rem;
+  text-align: center;
+}
+
+.boss-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 244, 224, 0.12);
+  overflow: hidden;
+}
+
+#boss-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #e85d4c, #ff6b9d, #f4c15d);
+  box-shadow: 0 0 14px rgba(255, 107, 157, 0.45);
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  max-width: min(520px, 88vw);
+  padding: 0.75rem 1.2rem;
+  border-radius: 999px;
+  background: rgba(10, 22, 40, 0.72);
+  border: 1px solid rgba(244, 193, 93, 0.35);
+  color: var(--cream);
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  font-style: italic;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  animation: toast-in 0.35s ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 .hud-center {
   display: flex;
   justify-content: center;

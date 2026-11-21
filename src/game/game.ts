@@ -3,7 +3,14 @@ import { GameAudio } from './audio'
 import { ParticleSystem } from './particles'
 import { Player } from './player'
 import { World } from './world'
-import { CombatSystem, drawEnemy } from './combat'
+import { CombatSystem, createBoss, drawEnemy, drawPackage } from './combat'
+import {
+  LEVELS,
+  UPGRADES,
+  UPGRADE_ORDER,
+  type UpgradeId,
+} from './progression'
+import { WEAPONS, nextWeaponAfter, randomWeapon } from './weapons'
 import { clamp, lerp, easeOutCubic } from './math'
 
 export type GameMode = 'title' | 'playing' | 'paused' | 'over'
@@ -40,7 +47,13 @@ export class Game {
   gunSoundCooldown = 0
   startOriginX = 0
 
-  private raf = 0
+  levelIndex = 0
+  levelKills = 0
+  totalKills = 0
+  bossSpawned = false
+  toastTimer = 0
+  announceTimer = 0
+
   private last = 0
   private running = false
 
@@ -48,11 +61,18 @@ export class Game {
     hud: document.getElementById('hud')!,
     score: document.getElementById('score')!,
     distance: document.getElementById('distance')!,
+    kills: document.getElementById('kills')!,
+    weapon: document.getElementById('weapon')!,
     combo: document.getElementById('combo')!,
+    levelBanner: document.getElementById('level-banner')!,
+    bossWrap: document.getElementById('boss-bar-wrap')!,
+    bossName: document.getElementById('boss-name')!,
+    bossFill: document.getElementById('boss-fill')!,
     boostBar: document.getElementById('boost-bar')!,
     boostFill: document.getElementById('boost-fill')!,
     hpFill: document.getElementById('hp-fill')!,
     missiles: document.getElementById('missiles')!,
+    toast: document.getElementById('toast')!,
     overlay: document.getElementById('overlay')!,
     pause: document.getElementById('pause')!,
     tagline: document.getElementById('tagline')!,
@@ -61,11 +81,12 @@ export class Game {
     menuStats: document.getElementById('menu-stats')!,
     finalScore: document.getElementById('final-score')!,
     bestScore: document.getElementById('best-score')!,
-    finalDistance: document.getElementById('final-distance')!,
+    finalLevel: document.getElementById('final-level')!,
     touchHint: document.getElementById('touch-hint')!,
     touchControls: document.getElementById('touch-controls')!,
     btnGun: document.getElementById('btn-gun') as HTMLButtonElement,
     btnMissile: document.getElementById('btn-missile') as HTMLButtonElement,
+    btnWeapon: document.getElementById('btn-weapon') as HTMLButtonElement,
     btnBoost: document.getElementById('btn-boost') as HTMLButtonElement,
   }
 
@@ -128,6 +149,13 @@ export class Game {
       e.stopPropagation()
       this.input.clearTouchMissile()
     })
+    this.el.btnWeapon.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.player.cycleWeapon()
+      this.toast(`Weapon: ${WEAPONS[this.player.weapon].name}`, 1.6)
+      this.syncHud()
+    })
   }
 
   startLoop() {
@@ -140,15 +168,9 @@ export class Game {
       this.last = now
       this.update(dt)
       this.draw()
-      this.raf = requestAnimationFrame(tick)
+      requestAnimationFrame(tick)
     }
-    this.raf = requestAnimationFrame(tick)
-  }
-
-  stopLoop() {
-    this.running = false
-    cancelAnimationFrame(this.raf)
-    this.input.unbind()
+    requestAnimationFrame(tick)
   }
 
   private resize = () => {
@@ -173,6 +195,10 @@ export class Game {
     }
   }
 
+  private level() {
+    return LEVELS[Math.min(this.levelIndex, LEVELS.length - 1)]
+  }
+
   private showTitle() {
     this.mode = 'title'
     this.el.overlay.classList.remove('hidden')
@@ -181,9 +207,12 @@ export class Game {
     this.el.boostBar.classList.add('hidden')
     this.el.touchControls.classList.add('hidden')
     this.el.menuStats.classList.add('hidden')
-    this.el.tagline.textContent = 'Dream skies. Real dogfights. Clear air ahead.'
+    this.el.bossWrap.classList.add('hidden')
+    this.el.tagline.textContent =
+      'Levels. Bosses. Absurd explosions. Air packages raining firepower.'
     this.el.startBtn.textContent = 'Begin Sortie'
     this.el.touchHint.classList.add('hidden')
+    this.hideToast()
     this.seedTitleScene()
   }
 
@@ -211,9 +240,14 @@ export class Game {
     this.nearMissCooldown = 0
     this.boostSoundCooldown = 0
     this.gunSoundCooldown = 0
+    this.levelIndex = 0
+    this.levelKills = 0
+    this.totalKills = 0
+    this.bossSpawned = false
     this.particles.clear()
     this.combat.clear()
     this.world.reset(this.width, this.height)
+    this.applyLevelSettings()
     this.player.reset(this.width * 0.32, this.height * 0.5)
     this.startOriginX = this.player.x
     this.camX = this.player.x - this.width * 0.32
@@ -225,7 +259,23 @@ export class Game {
     this.el.boostBar.classList.remove('hidden')
     this.el.touchControls.classList.remove('hidden')
     this.el.touchHint.classList.remove('hidden')
+    this.el.bossWrap.classList.add('hidden')
+    this.announceLevel()
     this.syncHud()
+  }
+
+  private applyLevelSettings() {
+    const lv = this.level()
+    this.world.spawnMult = lv.spawnMult
+    this.world.bossActive = false
+    this.bossSpawned = false
+  }
+
+  private announceLevel() {
+    const lv = this.level()
+    this.toast(`Level ${lv.level}: ${lv.name} — ${lv.blurb}`, 3.2)
+    this.audio.levelUp()
+    this.announceTimer = 3.2
   }
 
   pause() {
@@ -241,49 +291,59 @@ export class Game {
     this.last = performance.now()
   }
 
+  private toast(msg: string, duration = 2.2) {
+    this.el.toast.textContent = msg
+    this.el.toast.classList.remove('hidden')
+    this.toastTimer = duration
+  }
+
+  private hideToast() {
+    this.el.toast.classList.add('hidden')
+    this.toastTimer = 0
+  }
+
   private gameOver() {
     this.mode = 'over'
     this.player.alive = false
     this.audio.hit()
-    this.shake = 14
-    this.flash = 0.55
-    this.particles.burst(this.player.x, this.player.y, 42, {
-      speed: 260,
-      hue: 30,
-      kind: 'ember',
-      size: 3.5,
-    })
-    this.particles.burst(this.player.x, this.player.y, 8, {
-      speed: 80,
-      kind: 'shock',
-      size: 28,
-      hue: 25,
-    })
-
+    this.absurdExplosion(this.player.x, this.player.y, 1.4)
     if (this.score > this.best) {
       this.best = this.score
       localStorage.setItem(HS_KEY, String(this.best))
     }
-
     this.el.hud.classList.add('hidden')
     this.el.boostBar.classList.add('hidden')
     this.el.touchControls.classList.add('hidden')
+    this.el.bossWrap.classList.add('hidden')
     this.el.menuStats.classList.remove('hidden')
     this.el.finalScore.textContent = String(Math.floor(this.score))
     this.el.bestScore.textContent = String(Math.floor(this.best))
-    this.el.finalDistance.textContent = `${Math.floor(this.distance)}m`
+    this.el.finalLevel.textContent = String(this.level().level)
     this.el.tagline.textContent =
       this.score >= this.best && this.score > 0
-        ? 'A new horizon. The dusk remembers you.'
+        ? 'Cataclysm complete. The dusk crowns you.'
         : 'Hull breached. Climb again.'
     this.el.startBtn.textContent = 'Fly Again'
     this.el.overlay.classList.remove('hidden')
   }
 
+  private absurdExplosion(x: number, y: number, power = 1) {
+    const p = power * this.player.boomPower
+    this.particles.megaExplosion(x, y, p)
+    this.shake = Math.max(this.shake, 18 + p * 10)
+    this.flash = Math.max(this.flash, 0.55 + p * 0.15)
+    this.audio.megaBoom()
+  }
+
   private update(dt: number) {
     this.time += dt
-    this.shake = Math.max(0, this.shake - dt * 28)
-    this.flash = Math.max(0, this.flash - dt * 1.4)
+    this.shake = Math.max(0, this.shake - dt * 22)
+    this.flash = Math.max(0, this.flash - dt * 1.1)
+    if (this.toastTimer > 0) {
+      this.toastTimer -= dt
+      if (this.toastTimer <= 0) this.hideToast()
+    }
+    this.announceTimer = Math.max(0, this.announceTimer - dt)
 
     if (this.mode === 'title' || this.mode === 'over') {
       this.camX += 28 * dt
@@ -298,9 +358,19 @@ export class Game {
 
     if (this.mode === 'paused') return
 
-    const difficulty = clamp(this.distance / 1800, 0, 4)
+    const lv = this.level()
+    const difficulty = clamp(
+      this.distance / 1800 + lv.difficultyBias,
+      0,
+      6,
+    )
     const inThermal = this.world.inThermal(this.player.x, this.player.y)
     this.player.update(dt, this.input, this.particles, this.width, this.height, inThermal)
+
+    if (this.input.consumeWeaponCycle()) {
+      this.player.cycleWeapon()
+      this.toast(`Weapon: ${WEAPONS[this.player.weapon].name}`, 1.4)
+    }
 
     const targetCamX = this.player.x - this.width * 0.32
     const targetCamY = (this.player.y - this.height * 0.5) * 0.15
@@ -312,7 +382,7 @@ export class Game {
     this.particles.update(dt)
 
     this.distance = Math.max(0, (this.player.x - this.startOriginX) / 10)
-    this.score += dt * (4 + this.combo * 1.5) * (1 + difficulty * 0.15)
+    this.score += dt * (5 + this.combo * 2) * (1 + difficulty * 0.2)
 
     if (inThermal) {
       this.thermalScoreTick += dt
@@ -321,23 +391,16 @@ export class Game {
         this.score += 5 * this.combo
         this.audio.thermal()
       }
-      if (Math.random() < dt * 8) {
-        this.particles.burst(this.player.x, this.player.y + randOffset(), 1, {
-          speed: 40,
-          hue: 170,
-          kind: 'dust',
-          size: 2,
-        })
-      }
     }
 
     const collected = this.world.collectLanterns(
       this.player.x,
       this.player.y,
       this.player.radius,
+      this.player.magnetRange,
     )
     for (const l of collected) {
-      this.combo = Math.min(8, this.combo + 1)
+      this.combo = Math.min(12, this.combo + 1)
       this.comboTimer = 2.4
       this.score += l.worth * this.combo
       this.player.missiles = Math.min(
@@ -347,8 +410,15 @@ export class Game {
       this.player.hp = Math.min(this.player.maxHp, this.player.hp + 4)
       this.audio.collect()
       this.particles.burst(l.x, l.y, 16, { speed: 140, hue: 42, kind: 'spark' })
-      this.flash = Math.max(this.flash, 0.12)
     }
+
+    const packs = this.world.collectPackages(
+      this.player.x,
+      this.player.y,
+      this.player.radius,
+      this.player.magnetRange,
+    )
+    for (const p of packs) this.applyPackage(p.kind)
 
     this.comboTimer -= dt
     if (this.comboTimer <= 0) this.combo = 1
@@ -358,16 +428,11 @@ export class Game {
       this.nearMissCooldown <= 0 &&
       this.world.nearMissEnemy(this.player.x, this.player.y, this.player.radius)
     ) {
-      this.nearMissCooldown = 0.55
-      this.combo = Math.min(8, this.combo + 1)
+      this.nearMissCooldown = 0.5
+      this.combo = Math.min(12, this.combo + 1)
       this.comboTimer = 2.2
-      this.score += 20 * this.combo
+      this.score += 25 * this.combo
       this.audio.nearMiss()
-      this.particles.burst(this.player.x, this.player.y, 6, {
-        speed: 90,
-        hue: 45,
-        kind: 'spark',
-      })
     }
 
     this.boostSoundCooldown -= dt
@@ -384,20 +449,19 @@ export class Game {
       clamp(Math.hypot(this.player.vx, this.player.vy) / 480, 0, 1),
     )
 
-    // Ramming enemy jets damages hull — no invisible terrain barriers
     const ram = this.world.enemyCollision(
       this.player.x,
       this.player.y,
       this.player.radius,
     )
     if (ram && this.player.invuln <= 0) {
-      const dead = this.player.takeDamage(18)
+      const dead = this.player.takeDamage(ram.isBoss ? 28 : 16)
       this.audio.damage()
-      this.shake = Math.max(this.shake, 8)
-      this.flash = Math.max(this.flash, 0.25)
-      ram.hp -= 25
-      this.particles.burst(this.player.x, this.player.y, 12, {
-        speed: 160,
+      this.shake = Math.max(this.shake, 10)
+      this.flash = Math.max(this.flash, 0.3)
+      ram.hp -= 30 * this.player.damageMult
+      this.particles.burst(this.player.x, this.player.y, 14, {
+        speed: 180,
         hue: 15,
         kind: 'ember',
       })
@@ -405,59 +469,127 @@ export class Game {
       if (dead) this.gameOver()
     }
 
+    this.maybeSpawnBoss()
     this.syncHud()
   }
 
+  private applyPackage(kind: import('./progression').PackageKind) {
+    this.audio.pickup()
+    this.flash = Math.max(this.flash, 0.18)
+    if (kind === 'weapon') {
+      const w = randomWeapon(this.player.weapon)
+      this.player.unlockWeapon(w)
+      this.toast(`Air package: ${WEAPONS[w].name}!`, 2.2)
+    } else if (kind === 'missiles') {
+      this.player.missiles = Math.min(
+        this.player.maxMissiles,
+        this.player.missiles + 4,
+      )
+      this.toast('Air package: Missile reload!', 1.8)
+    } else if (kind === 'heal') {
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 45)
+      this.toast('Air package: Hull repair!', 1.8)
+    } else if (kind === 'upgrade') {
+      const id = this.pickUpgrade()
+      this.player.applyUpgrade(id)
+      this.toast(`Jet upgrade: ${UPGRADES[id].name}!`, 2.4)
+    } else {
+      this.player.overcharge = Math.max(this.player.overcharge, 8)
+      this.toast('OVERCHARGE — guns gone wild!', 2.2)
+    }
+  }
+
+  private pickUpgrade(): UpgradeId {
+    const unused = UPGRADE_ORDER.filter((id) => !(this.player.upgrades[id] ?? 0))
+    if (unused.length) return unused[Math.floor(Math.random() * unused.length)]
+    return UPGRADE_ORDER[Math.floor(Math.random() * UPGRADE_ORDER.length)]
+  }
+
+  private maybeSpawnBoss() {
+    const lv = this.level()
+    if (this.bossSpawned || this.levelKills < lv.killsToBoss) return
+    this.bossSpawned = true
+    this.world.bossActive = true
+    // Clear small fry for drama
+    for (const e of this.world.enemies) {
+      if (!e.isBoss) e.hp = 0
+    }
+    const boss = createBoss(
+      lv.boss,
+      lv.bossName,
+      this.camX + this.width * 0.78,
+      this.height * 0.5,
+      lv.level,
+    )
+    this.world.enemies.push(boss)
+    this.toast(`BOSS — ${lv.bossName}`, 3)
+    this.audio.levelUp()
+    this.el.bossWrap.classList.remove('hidden')
+    this.shake = Math.max(this.shake, 12)
+  }
+
   private updateCombat(dt: number, difficulty: number) {
-    // Player guns
     if (this.input.gunHeld && this.player.gunCd <= 0 && this.player.alive) {
-      this.player.gunCd = 0.09
+      this.player.gunCd = this.player.weaponInterval()
       const noseX = this.player.x + Math.cos(this.player.angle) * 22
       const noseY = this.player.y + Math.sin(this.player.angle) * 22
-      this.combat.fireGun(noseX, noseY - 4, this.player.angle, true)
-      this.combat.fireGun(noseX, noseY + 4, this.player.angle, true)
-      this.gunSoundCooldown -= dt
+      this.combat.firePlayerWeapon(
+        this.player.weapon,
+        noseX,
+        noseY,
+        this.player.angle,
+        this.player.damageMult,
+      )
       if (this.gunSoundCooldown <= 0) {
-        this.gunSoundCooldown = 0.07
+        this.gunSoundCooldown = 0.06
         this.audio.gun()
       }
-    } else {
-      this.gunSoundCooldown = 0
     }
+    this.gunSoundCooldown = Math.max(0, this.gunSoundCooldown - dt)
 
-    // Player missiles
     if (
       this.player.alive &&
       this.player.missileCd <= 0 &&
       this.player.missiles > 0 &&
       this.input.missileHeld
     ) {
-      this.player.missileCd = 0.55
+      this.player.missileCd = 0.48
       this.player.missiles -= 1
       const noseX = this.player.x + Math.cos(this.player.angle) * 18
       const noseY = this.player.y + Math.sin(this.player.angle) * 18
-      this.combat.fireMissile(noseX, noseY, this.player.angle, true)
+      this.combat.fireMissile(
+        noseX,
+        noseY,
+        this.player.angle,
+        true,
+        this.player.damageMult,
+      )
       this.input.clearTouchMissile()
       this.audio.missile()
     }
 
-    // Enemy AI fire
     for (const e of this.world.enemies) {
       if (e.hp <= 0 || e.fireCd > 0) continue
       const dx = this.player.x - e.x
-      if (dx > 40 || dx < -520) continue
+      if (!e.isBoss && (dx > 40 || dx < -560)) continue
       const aim = Math.atan2(this.player.y - e.y, this.player.x - e.x)
+
+      if (e.isBoss) {
+        this.bossAttack(e, aim, difficulty)
+        continue
+      }
+
       if (e.kind === 'titan') {
-        e.fireCd = Math.max(0.7, 1.4 - difficulty * 0.12)
+        e.fireCd = Math.max(0.55, 1.2 - difficulty * 0.1)
         this.combat.fireMissile(e.x, e.y, aim, false)
-        this.combat.fireGun(e.x, e.y, aim + 0.1, false)
-        this.combat.fireGun(e.x, e.y, aim - 0.1, false)
-      } else if (e.kind === 'mirage') {
-        e.fireCd = Math.max(0.28, 0.55 - difficulty * 0.05)
-        this.combat.fireGun(e.x, e.y, aim, false)
         this.combat.fireGun(e.x, e.y, aim + 0.12, false)
+        this.combat.fireGun(e.x, e.y, aim - 0.12, false)
+      } else if (e.kind === 'mirage') {
+        e.fireCd = Math.max(0.22, 0.48 - difficulty * 0.04)
+        this.combat.fireGun(e.x, e.y, aim, false)
+        this.combat.fireGun(e.x, e.y, aim + 0.14, false)
       } else {
-        e.fireCd = Math.max(0.45, 0.9 - difficulty * 0.08)
+        e.fireCd = Math.max(0.35, 0.8 - difficulty * 0.07)
         this.combat.fireGun(e.x, e.y, aim, false)
       }
     }
@@ -468,11 +600,20 @@ export class Game {
     const hits = this.combat.hitEnemies(this.world.enemies)
     for (const h of hits) {
       h.enemy.hp -= h.damage
-      this.particles.burst(h.x, h.y, h.kind === 'missile' ? 18 : 6, {
-        speed: h.kind === 'missile' ? 200 : 100,
-        hue: h.kind === 'missile' ? 28 : 45,
+      const sparks = h.kind === 'missile' || h.explode ? 22 : 8
+      this.particles.burst(h.x, h.y, sparks, {
+        speed: h.explode ? 240 : 120,
+        hue: h.kind === 'plasma' ? 170 : 35,
         kind: 'spark',
       })
+      if (h.explode) {
+        this.particles.burst(h.x, h.y, 3, {
+          speed: 40,
+          kind: 'shock',
+          size: 20,
+          hue: 40,
+        })
+      }
       if (h.enemy.hp <= 0) this.destroyEnemy(h.enemy)
     }
 
@@ -481,13 +622,13 @@ export class Game {
       this.player.y,
       this.player.radius,
     )
-    if (dmg > 0) {
-      const dead = this.player.takeDamage(dmg)
+    if (dmg) {
+      const dead = this.player.takeDamage(dmg.damage)
       this.audio.damage()
-      this.shake = Math.max(this.shake, 6)
-      this.flash = Math.max(this.flash, 0.2)
-      this.particles.burst(this.player.x, this.player.y, 10, {
-        speed: 140,
+      this.shake = Math.max(this.shake, 7)
+      this.flash = Math.max(this.flash, 0.22)
+      this.particles.burst(this.player.x, this.player.y, 12, {
+        speed: 150,
         hue: 10,
         kind: 'ember',
       })
@@ -495,33 +636,130 @@ export class Game {
     }
   }
 
-  private destroyEnemy(e: { x: number; y: number; score: number; hp: number }) {
+  private bossAttack(
+    e: import('./combat').Enemy,
+    aim: number,
+    difficulty: number,
+  ) {
+    const id = e.bossId
+    if (id === 'sol') {
+      e.fireCd = Math.max(0.35, 0.7 - difficulty * 0.04)
+      for (let i = -2; i <= 2; i++) this.combat.fireGun(e.x, e.y, aim + i * 0.12, false)
+      if (Math.random() < 0.35) this.combat.fireMissile(e.x, e.y, aim, false)
+    } else if (id === 'eclipse') {
+      e.fireCd = Math.max(0.28, 0.55 - difficulty * 0.04)
+      this.combat.fireGun(e.x, e.y - 18, aim, false)
+      this.combat.fireGun(e.x, e.y + 18, aim, false)
+      this.combat.fireMissile(e.x, e.y, aim + 0.2, false)
+      this.combat.fireMissile(e.x, e.y, aim - 0.2, false)
+    } else if (id === 'leviathan') {
+      e.fireCd = Math.max(0.4, 0.85 - difficulty * 0.05)
+      for (let i = -3; i <= 3; i++) this.combat.fireGun(e.x, e.y, aim + i * 0.1, false)
+      this.combat.fireMissile(e.x, e.y, aim, false)
+      this.combat.fireMissile(e.x, e.y, aim + 0.35, false)
+      this.combat.fireMissile(e.x, e.y, aim - 0.35, false)
+    } else {
+      e.fireCd = Math.max(0.22, 0.45 - difficulty * 0.03)
+      for (let i = 0; i < 8; i++) {
+        const a = aim + (i / 8) * Math.PI * 2 + e.phase
+        this.combat.fireGun(e.x, e.y, a, false)
+      }
+      this.combat.fireMissile(e.x, e.y, aim, false)
+    }
+  }
+
+  private destroyEnemy(e: import('./combat').Enemy) {
+    const wasBoss = !!e.isBoss
     e.hp = 0
-    this.combo = Math.min(8, this.combo + 1)
-    this.comboTimer = 2.6
+    this.totalKills += 1
+    if (!wasBoss) this.levelKills += 1
+
+    this.combo = Math.min(12, this.combo + (wasBoss ? 3 : 1))
+    this.comboTimer = 3
     this.score += e.score * this.combo
-    this.audio.explosion()
-    this.shake = Math.max(this.shake, 5)
-    this.particles.burst(e.x, e.y, 28, {
-      speed: 220,
-      hue: 20,
-      kind: 'ember',
-      size: 3.2,
-    })
-    this.particles.burst(e.x, e.y, 4, {
-      speed: 60,
-      kind: 'shock',
-      size: 22,
-      hue: 15,
-    })
+
+    // ABSURD boom
+    this.absurdExplosion(e.x, e.y, wasBoss ? 2.4 : 1.15 + Math.random() * 0.4)
+
+    // Chain sparkles for action feel
+    for (let i = 0; i < 3; i++) {
+      this.particles.burst(
+        e.x + (Math.random() - 0.5) * 40,
+        e.y + (Math.random() - 0.5) * 40,
+        10,
+        { speed: 200, hue: 20 + i * 15, kind: 'ember', size: 4 },
+      )
+    }
+
+    this.world.dropFromKill(e.x, e.y)
+
+    // Every 5 plane kills → new weapon
+    if (!wasBoss) {
+      const unlock = nextWeaponAfter(this.player.ownedWeapons, this.totalKills)
+      if (this.totalKills % 5 === 0) {
+        const w = unlock ?? randomWeapon(this.player.weapon)
+        this.player.unlockWeapon(w)
+        this.toast(`Kill streak armory: ${WEAPONS[w].name} unlocked!`, 2.6)
+        this.audio.levelUp()
+      }
+    }
+
+    if (wasBoss) this.onBossDefeated()
+  }
+
+  private onBossDefeated() {
+    const lv = this.level()
+    this.el.bossWrap.classList.add('hidden')
+    this.world.bossActive = false
+    this.player.applyUpgrade(lv.rewardUpgrade)
+    this.player.hp = this.player.maxHp
+    this.player.missiles = this.player.maxMissiles
+    this.toast(
+      `${lv.bossName} down! Upgrade: ${UPGRADES[lv.rewardUpgrade].name}`,
+      3.4,
+    )
+    this.audio.levelUp()
+
+    if (this.levelIndex >= LEVELS.length - 1) {
+      // Endless amp after final boss
+      this.levelIndex = LEVELS.length - 1
+      this.levelKills = 0
+      this.bossSpawned = false
+      this.world.spawnMult = 2.1
+      this.toast('Nightfall endless — survive the storm!', 3)
+      return
+    }
+
+    this.levelIndex += 1
+    this.levelKills = 0
+    this.bossSpawned = false
+    this.applyLevelSettings()
+    this.announceLevel()
   }
 
   private syncHud() {
+    const lv = this.level()
     this.el.score.textContent = String(Math.floor(this.score))
     this.el.distance.textContent = `${Math.floor(this.distance)}m`
+    this.el.kills.textContent = this.bossSpawned
+      ? 'BOSS'
+      : `${this.levelKills}/${lv.killsToBoss}`
     this.el.boostFill.style.width = `${Math.floor(this.player.boost * 100)}%`
     this.el.hpFill.style.width = `${Math.floor((this.player.hp / this.player.maxHp) * 100)}%`
     this.el.missiles.textContent = String(this.player.missiles)
+    this.el.weapon.textContent = WEAPONS[this.player.weapon].name
+    this.el.weapon.style.color = WEAPONS[this.player.weapon].color
+    this.el.levelBanner.textContent = `Lv ${lv.level} · ${lv.name}`
+
+    const boss = this.world.enemies.find((e) => e.isBoss && e.hp > 0)
+    if (boss) {
+      this.el.bossWrap.classList.remove('hidden')
+      this.el.bossName.textContent = boss.name ?? 'Boss'
+      this.el.bossFill.style.width = `${Math.floor((boss.hp / boss.maxHp) * 100)}%`
+    } else if (!this.bossSpawned) {
+      this.el.bossWrap.classList.add('hidden')
+    }
+
     if (this.combo > 1) {
       this.el.combo.textContent = `×${this.combo}`
       this.el.combo.classList.remove('hidden')
@@ -579,23 +817,9 @@ export class Game {
       g.addColorStop(0.5, 'rgba(94, 200, 192, 0.14)')
       g.addColorStop(1, 'rgba(94, 200, 192, 0.02)')
       ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.moveTo(x, y + t.h)
-      for (let i = 0; i <= 8; i++) {
-        const py = y + t.h - (t.h * i) / 8
-        const wave = Math.sin(this.time * 2 + t.phase + i * 0.7) * 10
-        ctx.lineTo(x + t.w * 0.5 + wave, py)
-      }
-      for (let i = 8; i >= 0; i--) {
-        const py = y + t.h - (t.h * i) / 8
-        const wave = Math.sin(this.time * 2 + t.phase + i * 0.7 + 2) * 10
-        ctx.lineTo(x + t.w * 0.5 + wave, py)
-      }
-      ctx.closePath()
-      ctx.fill()
+      ctx.fillRect(x, y, t.w, t.h)
     }
 
-    // Lanterns
     for (const l of this.world.lanterns) {
       if (l.collected) continue
       const x = l.x - camX
@@ -617,6 +841,10 @@ export class Game {
       ctx.beginPath()
       ctx.arc(x, y, l.r, 0, Math.PI * 2)
       ctx.stroke()
+    }
+
+    for (const p of this.world.packages) {
+      drawPackage(ctx, p, camX, camY, this.time)
     }
 
     for (const e of this.world.enemies) {
@@ -642,7 +870,7 @@ export class Game {
     ctx.fillRect(0, 0, w, h)
 
     if (this.flash > 0) {
-      ctx.fillStyle = `rgba(255, 244, 224, ${this.flash * 0.35})`
+      ctx.fillStyle = `rgba(255, 220, 160, ${this.flash * 0.45})`
       ctx.fillRect(0, 0, w, h)
     }
 
@@ -679,8 +907,4 @@ export class Game {
     ctx.fill()
     ctx.globalAlpha = 1
   }
-}
-
-function randOffset() {
-  return (Math.random() - 0.5) * 40
 }

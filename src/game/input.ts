@@ -9,6 +9,7 @@ export class Input {
   private canvas: HTMLCanvasElement
   private bound = false
   private missilePulse = false
+  private weaponCycleQueued = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -97,6 +98,14 @@ export class Input {
     )
   }
 
+  consumeWeaponCycle(): boolean {
+    if (this.weaponCycleQueued) {
+      this.weaponCycleQueued = false
+      return true
+    }
+    return false
+  }
+
   setTouchGun(active: boolean) {
     this.pointerGun = active
   }
@@ -119,6 +128,10 @@ export class Input {
     }
     if (e.key === 'k' || e.key === 'K' || e.key === 'f' || e.key === 'F' || e.key === 'x' || e.key === 'X') {
       if (!this.keys.has(e.key)) this.missilePulse = true
+    }
+    if (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E' || e.key === 'Tab') {
+      e.preventDefault()
+      if (!this.keys.has(e.key)) this.weaponCycleQueued = true
     }
     this.keys.add(e.key)
   }
