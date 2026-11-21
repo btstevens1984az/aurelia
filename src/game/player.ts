@@ -171,6 +171,11 @@ export class Player {
 
   takeDamage(amount: number) {
     if (!this.alive || this.invuln > 0) return false
+    // Demo capture mode: ?demo=1 keeps the sortie alive for footage
+    if (typeof location !== 'undefined' && /(?:\?|&)demo=1(?:&|$)/.test(location.search)) {
+      this.invuln = 0.35
+      return false
+    }
     this.hp -= amount
     this.invuln = 0.7
     if (this.hp <= 0) {

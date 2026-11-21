@@ -20,11 +20,11 @@
 
 ## Trailer Reel
 
-Real gameplay captures — not mockups.
+Three **different** live captures from real runs — title, twin-cannon dogfight, then missiles / packages / weapon swaps.
 
-| Title Screen | Dogfight | Kill Fireworks |
+| Title Call | Twin Cannon Dogfight | Missiles & Packages |
 | :---: | :---: | :---: |
-| <img src="docs/media/aurelia_title.gif" alt="AURELIA title and begin sortie" width="320" /> | <img src="docs/media/aurelia_dogfight.gif" alt="Guns blazing dogfight" width="320" /> | <img src="docs/media/aurelia_explosions.gif" alt="Combat explosions and chaos" width="320" /> |
+| <img src="docs/media/aurelia_title.gif" alt="AURELIA title screen live capture" width="320" /> | <img src="docs/media/aurelia_dogfight.gif" alt="Live twin cannon dogfight gameplay" width="320" /> | <img src="docs/media/aurelia_explosions.gif" alt="Live missiles packages and weapon swap gameplay" width="320" /> |
 
 <p align="center">
   <img src="docs/media/still_dogfight.png" alt="Twin cannons cutting the dusk" width="48%" />
